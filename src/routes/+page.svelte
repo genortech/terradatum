@@ -1,115 +1,25 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { MapLibre, GeoJSON, CircleLayer, SymbolLayer } from 'svelte-maplibre';
-	import {
-		MapPin,
-		Upload,
-		Database,
-		BarChart3,
-		Zap,
-		Shield,
-		ChevronRight,
-		Search,
-		X
-	} from '@lucide/svelte';
+	import MapPreview from '$lib/components/map-preview.svelte';
+	import { MapPin, Upload, Database, BarChart3, Zap, Shield, ChevronRight } from '@lucide/svelte';
+	import { getSites, type Site } from '$lib/data/site-store';
+	import { onMount } from 'svelte';
 
-	const sydneyCenter: [number, number] = [151.2093, -33.8688];
+	let sites = $state<Site[]>(getSites());
 
-	let searchQuery = $state('');
-	let selectedAddress = $state<string | null>(null);
-	let mapZoom = $state(10);
-	let mapCenter = $state<[number, number]>(sydneyCenter);
-
-	const demoSites = [
-		{
-			lng: 151.21,
-			lat: -33.82,
-			name: 'North Sydney',
-			address: 'North Sydney NSW 2060',
-			resistivity: 24.5
-		},
-		{
-			lng: 151.0,
-			lat: -33.815,
-			name: 'Parramatta',
-			address: 'Parramatta NSW 2150',
-			resistivity: 156.2
-		},
-		{
-			lng: 151.075,
-			lat: -33.875,
-			name: 'Homebush',
-			address: 'Homebush NSW 2140',
-			resistivity: 89.3
-		},
-		{ lng: 151.25, lat: -33.89, name: 'Sydney CBD', address: 'Sydney NSW 2000', resistivity: 45.8 },
-		{ lng: 150.92, lat: -33.72, name: 'Penrith', address: 'Penrith NSW 2750', resistivity: 210.5 },
-		{
-			lng: 151.14,
-			lat: -33.92,
-			name: 'Marrickville',
-			address: 'Marrickville NSW 2204',
-			resistivity: 67.2
-		},
-		{
-			lng: 151.08,
-			lat: -33.78,
-			name: 'Strathfield',
-			address: 'Strathfield NSW 2135',
-			resistivity: 112.4
-		},
-		{
-			lng: 151.32,
-			lat: -33.75,
-			name: 'Chatswood',
-			address: 'Chatswood NSW 2067',
-			resistivity: 38.9
-		}
-	];
-
-	const searchResults = $derived(
-		searchQuery.length > 1
-			? demoSites.filter(
-					(site) =>
-						site.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-						site.address.toLowerCase().includes(searchQuery.toLowerCase())
-				)
-			: []
-	);
-
-	function selectAddress(site: (typeof demoSites)[0]) {
-		searchQuery = site.address;
-		selectedAddress = site.address;
-		mapCenter = [site.lng, site.lat];
-		mapZoom = 14;
-	}
-
-	function clearSearch() {
-		searchQuery = '';
-		selectedAddress = null;
-		mapZoom = 10;
-		mapCenter = sydneyCenter;
-	}
-
-	const geojsonData = {
-		type: 'FeatureCollection' as const,
-		features: demoSites.map((site) => ({
-			type: 'Feature' as const,
-			geometry: {
-				type: 'Point' as const,
-				coordinates: [site.lng, site.lat]
-			},
-			properties: { name: site.name, resistivity: site.resistivity, address: site.address }
-		}))
-	};
+	onMount(() => {
+		const interval = setInterval(() => {
+			sites = getSites();
+		}, 5000);
+		return () => clearInterval(interval);
+	});
 </script>
 
 <svelte:head>
 	<title>Terradatum - Earth Resistivity Data Repository</title>
 	<meta
 		name="description"
-		content="Store and visualize earth resistance measurements. Map-based data repository for electrical engineers and earthing professionals."
+		content="Store and visualize Wenner 4-pole earth resistance measurements. Map-based data repository for electrical engineers and earthing professionals."
 	/>
 </svelte:head>
 
@@ -136,17 +46,17 @@
 			</h1>
 
 			<p class="mx-auto mb-10 max-w-2xl text-lg text-muted-foreground md:text-xl">
-				Store, visualize, and analyze earth resistance measurements. Built for electrical engineers
-				and earthing professionals.
+				Store, visualize, and analyze Wenner 4-pole earth resistance measurements. Built for
+				electrical engineers and earthing professionals.
 			</p>
 
 			<div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
 				<Button
 					size="lg"
-					href="/auth"
+					href="/project/new"
 					class="gap-2 bg-purple text-purple-foreground hover:bg-purple/90"
 				>
-					Start Mapping
+					Start Uploading
 					<ChevronRight class="h-4 w-4" />
 				</Button>
 				<Button size="lg" variant="outline" href="/about" class="gap-2">Learn More</Button>
@@ -155,135 +65,7 @@
 	</section>
 </div>
 
-<section class="w-full space-y-4">
-	<div class="container mx-auto px-4">
-		<div class="relative mx-auto max-w-xl">
-			<div class="relative">
-				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-				<Input
-					type="text"
-					placeholder="Search for an address..."
-					class="pr-10 pl-10"
-					bind:value={searchQuery}
-				/>
-				{#if searchQuery}
-					<button
-						class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-						onclick={clearSearch}
-					>
-						<X class="h-4 w-4" />
-					</button>
-				{/if}
-			</div>
-
-			{#if searchResults.length > 0}
-				<div
-					class="absolute z-50 mt-1 w-full rounded-lg border border-border/40 bg-background shadow-lg"
-				>
-					{#each searchResults as site}
-						<button
-							class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50"
-							onclick={() => selectAddress(site)}
-						>
-							<MapPin class="h-4 w-4 text-purple" />
-							<div>
-								<p class="text-sm font-medium">{site.name}</p>
-								<p class="text-xs text-muted-foreground">{site.address}</p>
-							</div>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	</div>
-
-	<div class="relative h-[500px] w-full">
-		<MapLibre
-			bind:center={mapCenter}
-			bind:zoom={mapZoom}
-			class="h-full w-full"
-			style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
-			standardControls
-		>
-			<GeoJSON
-				data={geojsonData}
-				cluster={{
-					radius: 50,
-					maxZoom: 14
-				}}
-			>
-				<CircleLayer
-					id="clusters"
-					applyToClusters
-					paint={{
-						'circle-color': [
-							'step',
-							['get', 'point_count'],
-							'#22c55e',
-							10,
-							'#a855f7',
-							30,
-							'#f97316'
-						],
-						'circle-radius': ['step', ['get', 'point_count'], 20, 10, 30, 30, 40],
-						'circle-stroke-width': 2,
-						'circle-stroke-color': '#fff'
-					}}
-				>
-					<SymbolLayer
-						applyToClusters
-						layout={{
-							'text-field': ['get', 'point_count_abbreviated'],
-							'text-size': 14
-						}}
-						paint={{
-							'text-color': '#fff'
-						}}
-					/>
-				</CircleLayer>
-
-				<CircleLayer
-					id="unclustered-points"
-					applyToClusters={false}
-					paint={{
-						'circle-color': [
-							'step',
-							['get', 'resistivity'],
-							'#22c55e',
-							50,
-							'#a855f7',
-							100,
-							'#f97316'
-						],
-						'circle-radius': 8,
-						'circle-stroke-width': 2,
-						'circle-stroke-color': '#fff'
-					}}
-				/>
-			</GeoJSON>
-		</MapLibre>
-
-		<div
-			class="absolute top-4 right-4 z-10 w-64 rounded-lg border border-border/40 bg-background/90 px-4 py-3 backdrop-blur-sm"
-		>
-			<div class="mb-2 flex items-center justify-between">
-				<p class="text-sm font-medium">{selectedAddress ? 'Selected Area' : 'Sydney NSW'}</p>
-				{#if selectedAddress}
-					<button onclick={clearSearch} class="text-xs text-purple hover:underline"> Clear </button>
-				{/if}
-			</div>
-			<p class="text-2xl font-bold text-purple">{demoSites.length}</p>
-			<p class="text-xs text-muted-foreground">test sites</p>
-
-			{#if selectedAddress}
-				<div class="mt-3 border-t border-border/40 pt-3">
-					<p class="text-xs text-muted-foreground">Zoom level</p>
-					<p class="text-sm font-medium">{mapZoom.toFixed(1)}</p>
-				</div>
-			{/if}
-		</div>
-	</div>
-</section>
+<MapPreview {sites} />
 
 <section class="container mx-auto px-4 py-16">
 	<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -358,9 +140,9 @@
 				<span class="text-green">Data Management</span>
 			</h2>
 			<p class="mb-6 text-muted-foreground">
-				Terradatum helps electrical engineers and earthing specialists organize their test data
-				efficiently. Store readings, track equipment calibration, and maintain a searchable
-				repository of all your earth resistance measurements.
+				Terradatum helps electrical engineers and earthing specialists organize their Wenner 4-pole
+				test data efficiently. Store readings, track equipment calibration, and maintain a
+				searchable repository of all your earth resistance measurements.
 			</p>
 
 			<div class="space-y-4">
@@ -475,15 +257,15 @@
 			<h2 class="mb-4 text-3xl font-bold">Ready to Get Started?</h2>
 			<p class="mx-auto mb-8 max-w-xl text-muted-foreground">
 				Join engineers and earthing professionals who use Terradatum to manage their earth
-				resistivity data. Start mapping your measurements today.
+				resistivity data. Start mapping your Wenner 4-pole measurements today.
 			</p>
 			<div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
 				<Button
 					size="lg"
-					href="/auth"
+					href="/project/new"
 					class="gap-2 bg-purple text-purple-foreground hover:bg-purple/90"
 				>
-					Create Free Account
+					Register Project Site
 					<ChevronRight class="h-4 w-4" />
 				</Button>
 				<Button size="lg" variant="outline" href="/map">View Demo Map</Button>
